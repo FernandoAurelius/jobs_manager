@@ -71,9 +71,10 @@ def all_clients(request):
     """
     API endpoint to return all clients as JSON for AJAX table population.
     """
-    clients = Client.objects.values('id', 'name', 'email', 'phone', 'address', 'is_account_customer')
+    clients = Client.objects.values(
+        "id", "name", "email", "phone", "address", "is_account_customer"
+    )
     return JsonResponse(list(clients), safe=False)
-
 
 
 def AddClient(request):
@@ -81,7 +82,9 @@ def AddClient(request):
         # Check for stub creation mode
         if request.GET.get("mode") == "redirect":
             name = request.GET.get("name", "")
-            client = Client.objects.create(name=name) if name else Client.objects.create()
+            client = (
+                Client.objects.create(name=name) if name else Client.objects.create()
+            )
             return redirect("update_client", pk=client.id)
 
         # Default: Serve the add client form

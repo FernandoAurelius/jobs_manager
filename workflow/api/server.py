@@ -15,4 +15,3 @@ def get_env_variable(request):
         return JsonResponse({"error": f"Variable {var_name} not found"}, status=404)
 
     return JsonResponse({"value": value})
-

@@ -131,16 +131,26 @@ def get_tenant_id() -> str:
     """
     Retrieve the tenant ID from cache, refreshing or re-authenticating as needed.
     """
-    tenant_id = cache.get("xero_tenant_id")  # Step 1: Try to retrieve the tenant ID from the cache.
-    token = get_valid_token()  # Step 2: Ensure a valid token exists, refreshing if necessary.
+    tenant_id = cache.get(
+        "xero_tenant_id"
+    )  # Step 1: Try to retrieve the tenant ID from the cache.
+    token = (
+        get_valid_token()
+    )  # Step 2: Ensure a valid token exists, refreshing if necessary.
 
     if not token:
-        raise Exception("No valid Xero token found. Please complete the authorization workflow.")
+        raise Exception(
+            "No valid Xero token found. Please complete the authorization workflow."
+        )
 
-    if not tenant_id:  # Step 3: If tenant ID is missing, fetch it using the current token.
+    if (
+        not tenant_id
+    ):  # Step 3: If tenant ID is missing, fetch it using the current token.
         try:
             tenant_id = get_tenant_id_from_connections()
-            cache.set("xero_tenant_id", tenant_id)  # Cache the tenant ID for future use.
+            cache.set(
+                "xero_tenant_id", tenant_id
+            )  # Cache the tenant ID for future use.
         except Exception as e:
             raise Exception(f"Failed to fetch tenant ID: {str(e)}")
 

@@ -99,4 +99,5 @@ def refresh_xero_data(request):
 class XeroIndexView(TemplateView):
     """Note this page is currently inaccessible.  We are using a dropdown menu instead.
     Kept as of 2025-01-07 in case we change our mind"""
+
     template_name = "xero_index.html"

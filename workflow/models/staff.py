@@ -156,7 +156,7 @@ class Staff(AbstractBaseUser, PermissionsMixin):
     def name(self) -> str:
         return f"{self.first_name} {self.last_name}"
 
-    @name.setter 
+    @name.setter
     def name(self, value: str) -> None:
         parts = value.split()
         if len(parts) >= 2:

@@ -492,13 +492,14 @@ def sync_client_to_xero(client):
             new_contact_id = response.contacts[0].contact_id
             client.xero_contact_id = new_contact_id
             client.save()
-            logger.info(f"Created new client {client.name} in Xero with ID {new_contact_id}.")
+            logger.info(
+                f"Created new client {client.name} in Xero with ID {new_contact_id}."
+            )
 
         return response.contacts if response.contacts else []
     except Exception as e:
         logger.error(f"Failed to sync client {client.name} to Xero: {str(e)}")
         raise
-
 
 
 def single_sync_client(
@@ -761,7 +762,7 @@ def synchronise_xero_data():
 
     # Contacts/Clients
     clients_to_push = Client.objects.filter(
-        django_updated_at__gt=models.F('xero_last_modified')
+        django_updated_at__gt=models.F("xero_last_modified")
     )
     for client in clients_to_push:
         logger.info(f"Pushing changes for client {client.name} to Xero")

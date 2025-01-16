@@ -173,12 +173,15 @@ class Job(models.Model):
             company_defaults = CompanyDefaults.objects.first()
             self.charge_out_rate = company_defaults.charge_out_rate
 
-        if staff and not JobEvent.objects.filter(job=self, event_type="created").exists():
+        if (
+            staff
+            and not JobEvent.objects.filter(job=self, event_type="created").exists()
+        ):
             JobEvent.objects.create(
                 job=self,
                 event_type="created",
                 description=f"Job {self.name} created",
-                staff=staff
+                staff=staff,
             )
 
         if is_new:
@@ -217,7 +220,7 @@ class Job(models.Model):
                     job=self,
                     event_type="status_change",
                     description=f"Job status changed from {original_status} to {self.status}",
-                    staff=staff
+                    staff=staff,
                 )
 
             # Step 5: Save the Job to persist everything, including relationships

@@ -176,7 +176,6 @@ def set_client_fields(client, new_from_xero=False):
     else:
         raise ValueError("Xero last modified date is missing from the raw JSON.")
 
-
     if new_from_xero:
         client.django_created_at = client.xero_last_modified
         client.django_updated_at = client.xero_last_modified

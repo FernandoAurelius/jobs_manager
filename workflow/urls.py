@@ -66,7 +66,11 @@ urlpatterns = [
         edit_job_view_ajax.api_fetch_status_values,
         name="fetch_status_values",
     ),
-    path("api/job-event/<uuid:job_id>/add-event/", edit_job_view_ajax.add_job_event, name="add-event"),
+    path(
+        "api/job-event/<uuid:job_id>/add-event/",
+        edit_job_view_ajax.add_job_event,
+        name="add-event",
+    ),
     path("api/job-files/", JobFileView.as_view(), name="job-files"),  # For POST/upload
     path(
         "api/job-files/<path:file_path>", JobFileView.as_view(), name="serve-job-file"
@@ -128,7 +132,6 @@ urlpatterns = [
         CompanyProfitAndLossView.as_view(),
         name="company-profit-loss-report",
     ),
-
     path(
         "timesheets/day/<str:date>/<uuid:staff_id>/",
         time_entry_view.TimesheetEntryView.as_view(),
@@ -150,14 +153,10 @@ urlpatterns = [
         time_overview_view.TimesheetDailyView.as_view(),
         name="timesheet_daily_view",
     ),
-
     path("xero/", xero_view.XeroIndexView.as_view(), name="xero_index"),
-
-
     # Login/Logout views
     path("login/", auth_views.LoginView.as_view(), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
-
     # This URL doesn't match our naming pattern - need to fix.
     # Probably should be in api/internal?
     path(

@@ -34,11 +34,11 @@ class MaterialEntry(models.Model):
         max_digits=10, decimal_places=2, null=False, default=0
     )
     purchase_line = models.ForeignKey(
-        'PurchaseLine',
+        "PurchaseLine",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Source purchase line if from a purchase"
+        help_text="Source purchase line if from a purchase",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

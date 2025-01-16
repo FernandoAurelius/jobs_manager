@@ -260,7 +260,7 @@ def add_job_event(request, job_id):
     """
     Create a new job event for a specific job.
 
-    This view handles the creation of manual note events for jobs. It requires 
+    This view handles the creation of manual note events for jobs. It requires
     authentication and accepts only POST requests with JSON payload.
 
     Args:
@@ -300,25 +300,32 @@ def add_job_event(request, job_id):
         if not description:
             logger.warning(f"Missing description for job event on job {job_id}")
             return JsonResponse({"error": "Description required"}, status=400)
-            
-        logger.debug(f"Creating job event for job {job_id} with description: {description}")
+
+        logger.debug(
+            f"Creating job event for job {job_id} with description: {description}"
+        )
         event = JobEvent.objects.create(
-            job=job, 
-            staff=request.user, 
+            job=job,
+            staff=request.user,
             description=description,
-            event_type="manual_note"
-            )
-        
+            event_type="manual_note",
+        )
+
         logger.info(f"Successfully created job event {event.id} for job {job_id}")
-        return JsonResponse({
-            "success": True,
-            "event": {
-                "timestamp": event.timestamp.isoformat(),
-                "event_type": "manual_note", 
-                "description": event.description,
-                "staff": request.user.get_display_name() if request.user else "System"
-            }
-            }, status=201)
+        return JsonResponse(
+            {
+                "success": True,
+                "event": {
+                    "timestamp": event.timestamp.isoformat(),
+                    "event_type": "manual_note",
+                    "description": event.description,
+                    "staff": (
+                        request.user.get_display_name() if request.user else "System"
+                    ),
+                },
+            },
+            status=201,
+        )
 
     except Job.DoesNotExist:
         logger.error(f"Job {job_id} not found when creating event")
@@ -327,7 +334,9 @@ def add_job_event(request, job_id):
     except json.JSONDecodeError:
         logger.error(f"Invalid JSON payload for job {job_id}")
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-        
+
     except Exception as e:
-        logger.exception(f"Unexpected error creating job event for job {job_id}: {str(e)}")
+        logger.exception(
+            f"Unexpected error creating job event for job {job_id}: {str(e)}"
+        )
         return JsonResponse({"error": "An unexpected error occurred"}, status=500)

@@ -3,6 +3,7 @@ import django_filters
 from workflow.enums import InvoiceStatus
 from workflow.models import Invoice
 
+
 class InvoiceFilter(django_filters.FilterSet):
     invoice_number = django_filters.CharFilter(
         field_name="number", lookup_expr="icontains", label="Invoice Number"
