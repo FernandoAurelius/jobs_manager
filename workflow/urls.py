@@ -10,6 +10,7 @@ from workflow.views import (
     edit_job_view_ajax,
     invoice_view,
     kanban_view,
+    purchase_view,
     staff_view,
     time_entry_view,
     time_overview_view,
@@ -118,6 +119,11 @@ urlpatterns = [
         "jobs/<uuid:job_id>/update_status/",
         kanban_view.update_job_status,
         name="update_job_status",
+    ),
+    path(
+        "jobs/<uuid:job_id>/purchases",
+        purchase_view.PurchaseEntryView.as_view(),
+        name="purchases"
     ),
     # Kanban views
     path("kanban/", kanban_view.kanban_view, name="view_kanban"),
