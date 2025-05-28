@@ -163,42 +163,71 @@
         {% if job_files and not has_only_summary_pdf %}
         <div class="job-files-grid">
             {% for file in job_files %}
-            {% if file.filename != 'JobSummary.pdf' %}
-            <div class="file-card card-enhanced">
-                {% if file.thumbnail_path %}
-                <div class="thumbnail-container">
-                    <img src="{% url 'jobs:serve-job-file' file.thumbnail_path %}" alt="{{ file.filename }}"
-                        class="file-thumbnail">
-                </div>
+            {% if file.filename != 'JobSummary.pdf' %} {# Exclude JobSummary.pdf from this list #}
+            <div class="file-card card-enhanced" data-file-id="{{ file.id }}">
+                {% if file.is_accessible %}
+                    {# Accessible file: display link, thumbnail/extension, and controls #}
+                    {% if file.thumbnail_path %}
+                    <div class="thumbnail-container">
+                        {# Assuming 'jobs:serve-job-file' can handle thumbnail paths #}
+                        {# The 'file_path' argument in the URL tag should match your URL configuration #}
+                        <img src="{% url 'jobs:serve-job-file' file_path=file.thumbnail_path %}" alt="{{ file.filename }} thumbnail"
+                            class="file-thumbnail">
+                    </div>
+                    {% else %}
+                    <div class="thumbnail-container no-thumb">
+                        <span class="file-extension">
+                            {{ file.filename|slice:"-3:"|upper }} {# Display last 3 chars of filename as extension placeholder #}
+                        </span>
+                    </div>
+                    {% endif %}
+                    <div class="file-info">
+                        <a href="{% url 'jobs:serve-job-file' file_path=file.file_path %}" target="_blank" class="animated-link" title="Click to open/download {{ file.filename }}">
+                            {{ file.filename }}
+                        </a>
+                        {# Display the upload timestamp, formatted #}
+                        <span class="timestamp">({{ file.uploaded_at|date:"Y-m-d H:i" }})</span>
+                    </div>
+                    <div class="file-controls">
+                        <label class="print-checkbox">
+                            <input type="checkbox" name="jobfile_{{ file.id }}_print_on_jobsheet"
+                                data-file-id="{{ file.id }}" class="print-on-jobsheet"
+                                {% if file.print_on_jobsheet %}checked{% endif %}>
+                            Print on Job Sheet
+                        </label>
+                        <button class="btn btn-sm btn-danger delete-file" data-file-id="{{ file.id }}" title="Delete {{ file.filename }}">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </button>
+                    </div>
                 {% else %}
-                <div class="thumbnail-container no-thumb">
-                    <span class="file-extension">
-                        {% if file.size == 0 %}Very small{% else %}{{ file.size|filesizeformat }}{% endif %}
-                    </span>
-                </div>
+                    {# File is not accessible (e.g., status="deleted") #}
+                    <div class="thumbnail-container no-thumb">
+                        <span class="file-extension" style="color: #dc3545;">DEL</span>
+                    </div>
+                    <div class="file-info">
+                        <span class="deleted-file-text" style="color: #dc3545; font-weight: bold;" title="{{ file.filename }} is no longer accessible">{{ file.filename }} (DELETED FILE)</span>
+                        <span class="timestamp">({{ file.uploaded_at|date:"Y-m-d H:i" }})</span> {# Still show timestamp #}
+                    </div>
+                    <div class="file-controls">
+                        {# Controls are disabled for non-accessible files #}
+                        <label class="print-checkbox" style="opacity: 0.5; pointer-events: none;">
+                            <input type="checkbox" name="jobfile_{{ file.id }}_print_on_jobsheet"
+                                data-file-id="{{ file.id }}" class="print-on-jobsheet"
+                                disabled
+                                {% if file.print_on_jobsheet %}checked{% endif %}>
+                            Print on Job Sheet
+                        </label>
+                        <button class="btn btn-sm btn-danger delete-file" data-file-id="{{ file.id }}" disabled style="opacity: 0.5; pointer-events: none;">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </button>
+                    </div>
                 {% endif %}
-                <div class="file-info">
-                    <a href="{% url 'jobs:serve-job-file' file.file_path %}" target="_blank" class="animated-link">
-                        {{ file.filename }}
-                    </a>
-                    <span class="timestamp">({{ file.uploaded_at|date:"Y-m-d H:i" }})</span>
-                </div>
-                <div class="file-controls">
-                    <label class="print-checkbox">
-                        <input type="checkbox" name="jobfile_{{ file.id }}_print_on_jobsheet"
-                            data-file-id="{{ file.id }}" class="print-on-jobsheet"
-                            {% if file.print_on_jobsheet %}checked{% endif %}>
-                        Print on Job Sheet
-                    </label>
-                    <button class="btn btn-sm btn-danger delete-file" data-file-id="{{ file.id }}">
-                        <i class="bi bi-trash me-1"></i>Delete
-                    </button>
-                </div>
             </div>
             {% endif %}
             {% endfor %}
         </div>
         {% else %}
+        {# This message is shown if job_files is empty or has_only_summary_pdf is true #}
         <div class="alert alert-info">
             <i class="bi bi-info-circle me-2"></i>No files attached to this job.
         </div>

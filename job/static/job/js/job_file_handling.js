@@ -204,26 +204,64 @@ export async function updatePrintOnJobsheet(
   }
 }
 
-function updateFileList(newFiles) {
-  if (!newFiles || newFiles.length === 0) return;
+function updateFileList(filesToProcess) {
+  if (!filesToProcess || filesToProcess.length === 0) {
+    // If the list is empty, it might still be necessary to update the "no files" message,
+    // especially if all files were deleted.
+    updateNoFilesMessage();
+    return;
+  }
 
   const grid = document.querySelector(".job-files-grid") || createNewFileGrid();
 
-  newFiles.forEach((file) => {
-    // Ignore summary in visual list
-    if (file.filename === "JobSummary.pdf") return;
+  filesToProcess.forEach((file) => {
+    if (!file || !file.id) {
+      console.warn("[updateFileList] Invalid file data received:", file);
+      return; // Skip if file data is incomplete or malformed
+    }
+
+    // Standardize to ignore JobSummary.pdf in the visual list
+    if (file.filename === "JobSummary.pdf") {
+      return;
+    }
+
+    // Remove existing card for this file ID, if any, to replace it
+    const existingCard = grid.querySelector(`.file-card[data-file-id="${file.id}"]`);
+    if (existingCard) {
+      existingCard.remove();
+    }
 
     const card = document.createElement("div");
     card.className = "file-card";
-    card.dataset.fileId = file.id;
+    card.dataset.fileId = file.id; // Store file ID for later reference (e.g., deletion)
 
-    card.innerHTML = `
+    // Determine timestamp text
+    // The backend's JobFileSerializer provides 'uploaded_at'
+    let timestampText = "";
+    if (file.uploaded_at) {
+      try {
+        // Format the date. Using toLocaleDateString for simplicity.
+        // Consider a more robust date formatting library or method if specific formats are needed.
+        timestampText = `(${new Date(file.uploaded_at).toLocaleDateString()})`;
+      } catch (e) {
+        console.warn(`[updateFileList] Error formatting date for ${file.filename}:`, e);
+        // Fallback timestamp if date parsing fails
+        timestampText = file.is_accessible ? "(Uploaded)" : "(Info)";
+      }
+    } else {
+      // Fallback if 'uploaded_at' is not available in the file object
+      timestampText = file.is_accessible ? "(New/Updated)" : "(Info)";
+    }
+
+    if (file.is_accessible) {
+      // HTML for an accessible file
+      card.innerHTML = `
             <div class="thumbnail-container no-thumb">
                 <span class="file-extension">${getFileExtension(file.filename)}</span>
             </div>
             <div class="file-info">
-                <a href="/api/job-files/${file.file_path}" target="_blank">${file.filename}</a>
-                <span class="timestamp">(Just uploaded)</span>
+                <a href="/api/job-files/${file.file_path}" target="_blank" title="Click to open/download ${file.filename}">${file.filename}</a>
+                <span class="timestamp">${timestampText}</span> 
             </div>
             <div class="file-controls">
                 <label class="print-checkbox">
@@ -233,15 +271,41 @@ function updateFileList(newFiles) {
                         ${file.print_on_jobsheet ? "checked" : ""}>
                     Print on Job Sheet
                 </label>
-                <button class="btn btn-sm btn-danger delete-file" data-file-id="${file.id}">
+                <button class="btn btn-sm btn-danger delete-file" data-file-id="${file.id}" title="Delete ${file.filename}">
                     Delete
                 </button>
             </div>
         `;
+    } else {
+      // HTML for a non-accessible (e.g., "deleted") file
+      card.innerHTML = `
+            <div class="thumbnail-container no-thumb">
+                <span class="file-extension" style="color: #dc3545;">DEL</span>
+            </div>
+            <div class="file-info">
+                <span class="deleted-file-text" style="color: #dc3545; font-weight: bold;" title="${file.filename} is no longer accessible">${file.filename} (DELETED FILE)</span>
+                <span class="timestamp">${timestampText}</span> 
+            </div>
+            <div class="file-controls">
+                <label class="print-checkbox" style="opacity: 0.5; pointer-events: none;">
+                    <input type="checkbox" name="jobfile_${file.id}_print_on_jobsheet"
+                        class="print-on-jobsheet" 
+                        data-file-id="${file.id}" 
+                        disabled
+                        ${file.print_on_jobsheet ? "checked" : ""}>
+                    Print on Job Sheet
+                </label>
+                <button class="btn btn-sm btn-danger delete-file" data-file-id="${file.id}" disabled style="opacity: 0.5; pointer-events: none;">
+                    Delete
+                </button>
+            </div>
+        `;
+    }
 
     grid.appendChild(card);
   });
 
+  // Re-attach listeners to any new or modified checkboxes and update "no files" message
   attachPrintCheckboxListeners();
   updateNoFilesMessage();
 }
