@@ -1,17 +1,16 @@
 import logging
 import os
 
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse  # JsonResponse might not be needed if using DRF Response
 from rest_framework import status
 from rest_framework.renderers import BaseRenderer, JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-# Use django.conf.settings to access the fully configured Django settings
-# This ensures we get settings after all imports and env vars are processed
 from django.conf import settings
 
 from job.models import Job, JobFile
+from job.serializers import JobFileSerializer  # Ensure this import is present
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,7 @@ class JobFileView(APIView):
     def save_file(self, job, file_obj, print_on_jobsheet):
         """
         Save file to disk and create or update JobFile record.
+        Returns serialized JobFile data or an error dictionary.
         """
         job_folder = os.path.join(
             settings.DROPBOX_WORKFLOW_FOLDER, f"Job-{job.job_number}"
@@ -50,7 +50,7 @@ class JobFileView(APIView):
                 "Aborting save because the uploaded file size is 0 bytes: %s",
                 file_obj.name,
             )
-            return {
+            return {  # This remains an error dict, handled by the caller
                 "error": f"Uploaded file {file_obj.name} is empty (0 bytes), not saved."
             }
 
@@ -71,7 +71,9 @@ class JobFileView(APIView):
                     file_size_on_disk,
                     file_obj.size,
                 )
-                return {"error": f"File {file_obj.name} is corrupted or incomplete."}
+                return {  # Error dict
+                    "error": f"File {file_obj.name} is corrupted or incomplete."
+                }
             else:
                 logger.debug("File on disk verified with correct size.")
 
@@ -79,43 +81,40 @@ class JobFileView(APIView):
 
             job_file, created = JobFile.objects.update_or_create(
                 job=job,
-                filename=file_obj.name,
+                filename=file_obj.name,  # Assuming filename is unique per job for update_or_create
                 defaults={
                     "file_path": relative_path,
                     "mime_type": file_obj.content_type,
                     "print_on_jobsheet": print_on_jobsheet,
+                    "status": "active",  # Ensure new/updated files are active
                 },
             )
-
             logger.info(
                 "%s JobFile: %s (print_on_jobsheet=%s)",
                 "Created" if created else "Updated",
                 job_file.filename,
                 job_file.print_on_jobsheet,
             )
-            return {
-                "id": str(job_file.id),
-                "filename": job_file.filename,
-                "file_path": job_file.file_path,
-                "print_on_jobsheet": job_file.print_on_jobsheet,
-            }
+            serializer = JobFileSerializer(job_file)
+            return serializer.data  # Return serialized data
+
         except Exception as e:
             logger.exception("Error processing file %s: %s", file_obj.name, str(e))
-            return {"error": f"Error uploading {file_obj.name}: {str(e)}"}
+            return {  # Error dict
+                "error": f"Error uploading {file_obj.name}: {str(e)}"
+            }
 
     def post(self, request):
         """
-        Handle file uploads. Creates new files or updates existing ones with POST.
+        Handle file uploads. Creates new JobFile records.
         """
         logger.debug("Processing POST request to upload files (creating new).")
-
         job_number = request.data.get("job_number")
         if not job_number:
             return Response(
                 {"status": "error", "message": "Job number is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         try:
             job = Job.objects.get(job_number=job_number)
         except Job.DoesNotExist:
@@ -131,8 +130,10 @@ class JobFileView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        print_on_jobsheet = True
-        uploaded_files = []
+        print_on_jobsheet_str = request.data.get("print_on_jobsheet", "true")
+        print_on_jobsheet = print_on_jobsheet_str.lower() in ["true", "1"]
+
+        uploaded_files_data = []
         errors = []
 
         for file_obj in files:
@@ -140,18 +141,19 @@ class JobFileView(APIView):
             if "error" in result:
                 errors.append(result["error"])
             else:
-                uploaded_files.append(result)
+                # result is now serialized data
+                uploaded_files_data.append(result)
 
         if errors:
             return Response(
                 {
-                    "status": "partial_success" if uploaded_files else "error",
-                    "uploaded": uploaded_files,
+                    "status": "partial_success" if uploaded_files_data else "error",
+                    "uploaded": uploaded_files_data,  # This is now an array of serialized objects
                     "errors": errors,
                 },
                 status=(
                     status.HTTP_207_MULTI_STATUS
-                    if uploaded_files
+                    if uploaded_files_data
                     else status.HTTP_400_BAD_REQUEST
                 ),
             )
@@ -159,7 +161,7 @@ class JobFileView(APIView):
         return Response(
             {
                 "status": "success",
-                "uploaded": uploaded_files,
+                "uploaded": uploaded_files_data,  # Array of serialized objects
                 "message": "Files uploaded successfully",
             },
             status=status.HTTP_201_CREATED,
@@ -181,13 +183,18 @@ class JobFileView(APIView):
         if not job_files.exists():
             return Response([], status=status.HTTP_200_OK)
 
-        return Response(
-            [
-                {"filename": file.filename, "file_path": file.file_path, "id": file.id}
-                for file in job_files
-            ],
-            status=status.HTTP_200_OK,
-        )
+        response_data = []
+        for file_obj in job_files:
+            response_data.append(
+                {
+                    "id": str(file_obj.id),
+                    "filename": file_obj.filename,
+                    "file_path": file_obj.file_path,
+                    "print_on_jobsheet": file_obj.print_on_jobsheet,
+                    "is_accessible": file_obj.is_accessible,
+                }
+            )
+        return Response(response_data, status=status.HTTP_200_OK)
 
     def _get_by_path(self, file_path):
         """
@@ -240,174 +247,118 @@ class JobFileView(APIView):
 
     def put(self, request):
         """
-        Update an existing job file:
-        - If a new file is provided (files[] in request), replace the file on disk.
-        - If no file_obj is provided, only update print_on_jobsheet.
+        Update an existing job file.
+        Can update file content (replace) or just metadata (print_on_jobsheet).
+        Expects job_number.
+        If file content: expects 'files' (single file) in request.FILES.
+        If metadata only: expects 'filename' and 'print_on_jobsheet' in request.data.
         """
-        logger.debug(
-            "Processing PUT request to update an existing file or its print_on_jobsheet."
-        )
+        logger.debug("Processing PUT request to update an existing file.")
 
         job_number = request.data.get("job_number")
-        print_on_jobsheet = str(request.data.get("print_on_jobsheet")) in [
-            "true",
-            "True",
-            "1",
-        ]
+        if not job_number:
+            return Response({"error": "Job number is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             job = Job.objects.get(job_number=job_number)
         except Job.DoesNotExist:
-            return Response(
-                {"status": "error", "message": "Job not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        file_obj = request.FILES.get("files")
-        if not file_obj:
-            # Case 1: No file provided, only update print_on_jobsheet
-            logger.debug(
-                "No file in PUT request, so only updating print_on_jobsheet => %s",
-                print_on_jobsheet,
-            )
+        file_obj_from_request = request.FILES.get("files")  # For replacing file content
+        filename_from_data = request.data.get("filename")  # For identifying file if not replacing content
 
-            # We need to know which JobFile we're updating, and currently the front-end is sending the filename.
-            filename = request.data.get("filename")  # Ex.: "test.jpeg"
-            if not filename:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": "Filename is required to update print_on_jobsheet.",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        job_file = None
 
-            job_file = JobFile.objects.filter(job=job, filename=filename).first()
-            if not job_file:
-                return Response(
-                    {"status": "error", "message": "File not found for update"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+        if file_obj_from_request:
+            # Updating file content (and potentially print_on_jobsheet)
+            # Identify JobFile by job and the name of the uploaded file
+            try:
+                job_file = JobFile.objects.get(job=job, filename=file_obj_from_request.name)
+            except JobFile.DoesNotExist:
+                # If PUT is used to upload a new file if it doesn't exist (upsert-like for content)
+                # This part of logic can be debated: should PUT create if not exists?
+                # For now, let's assume PUT updates an existing JobFile identified by filename.
+                logger.error(f"File '{file_obj_from_request.name}' not found for job {job_number} to update content.")
+                return Response({"error": f"File '{file_obj_from_request.name}' not found for this job."}, status=status.HTTP_404_NOT_FOUND)
 
-            old_value = job_file.print_on_jobsheet
-            job_file.print_on_jobsheet = print_on_jobsheet
-            job_file.save()
-            logger.info(
-                "Updated print_on_jobsheet from %s to %s for file %s",
-                old_value,
-                print_on_jobsheet,
-                filename,
-            )
+            print_on_jobsheet = str(request.data.get("print_on_jobsheet", str(job_file.print_on_jobsheet))).lower() in ["true", "1"]
 
-            return Response(
-                {"status": "success", "message": "Updated print_on_jobsheet only"},
-                status=status.HTTP_200_OK,
-            )
+            # Use save_file to handle disk operations and DB update
+            # save_file will call update_or_create, effectively updating the existing job_file
+            result = self.save_file(job, file_obj_from_request, print_on_jobsheet)
 
-        # Case 2: File provided, overwrite the file + update print_on_jobsheet
-        logger.info(
-            "PUT update for job #%s, file: %s, size: %d bytes",
-            job_number,
-            file_obj.name,
-            file_obj.size,
-        )
+            if "error" in result:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)  # Or 500 if server error during save
 
-        # Check if this file exists in the job:
-        job_file = JobFile.objects.filter(job=job, filename=file_obj.name).first()
-        if not job_file:
-            logger.error(
-                "File not found for update: %s in job %s", file_obj.name, job_number
-            )
-            return Response(
-                {"status": "error", "message": "File not found for update"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            # result is already serialized data from save_file
+            return Response(result, status=status.HTTP_200_OK)
 
-        if file_obj.size == 0:
-            logger.warning("PUT aborted because new file is 0 bytes: %s", file_obj.name)
-            return Response(
-                {"status": "error", "message": "New file is 0 bytes, update aborted."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        elif filename_from_data:
+            # Updating metadata only (print_on_jobsheet)
+            try:
+                job_file = JobFile.objects.get(job=job, filename=filename_from_data)
+            except JobFile.DoesNotExist:
+                logger.error(f"File '{filename_from_data}' not found for job {job_number} to update metadata.")
+                return Response({"error": f"File '{filename_from_data}' not found for this job."}, status=status.HTTP_404_NOT_FOUND)
 
-        file_path = os.path.join(settings.DROPBOX_WORKFLOW_FOLDER, job_file.file_path)
-        logger.debug("Overwriting file on disk: %s", file_path)
-        try:
-            bytes_written = 0
-            with open(file_path, "wb") as destination:
-                for chunk in file_obj.chunks():
-                    destination.write(chunk)
-                    bytes_written += len(chunk)
+            if 'print_on_jobsheet' not in request.data:
+                return Response({"error": "print_on_jobsheet is required for metadata update."}, status=status.HTTP_400_BAD_REQUEST)
 
-            on_disk = os.path.getsize(file_path)
-            logger.info(
-                "PUT replaced file: %s, wrote %d bytes (on disk: %d).",
-                file_path,
-                bytes_written,
-                on_disk,
-            )
+            print_on_jobsheet = str(request.data.get("print_on_jobsheet")).lower() in ["true", "1"]
 
-            if on_disk < file_obj.size:
-                logger.error(
-                    "Updated file is smaller than expected (on_disk=%d < expected=%d).",
-                    on_disk,
-                    file_obj.size,
-                )
-                return Response(
-                    {"status": "error", "message": "File got truncated or incomplete."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            if job_file.print_on_jobsheet != print_on_jobsheet:
+                job_file.print_on_jobsheet = print_on_jobsheet
+                job_file.save(update_fields=['print_on_jobsheet'])
+                logger.info(f"Updated print_on_jobsheet for {job_file.filename} to {print_on_jobsheet}")
 
-            old_print_value = job_file.print_on_jobsheet
-            job_file.print_on_jobsheet = print_on_jobsheet
-            job_file.save()
-
-            logger.info(
-                "Successfully updated file: %s (print_on_jobsheet %s->%s).",
-                file_obj.name,
-                old_print_value,
-                print_on_jobsheet,
-            )
-            return Response(
-                {
-                    "status": "success",
-                    "message": "File updated successfully",
-                    "print_on_jobsheet": job_file.print_on_jobsheet,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            logger.exception("Error updating file %s: %s", file_path, str(e))
-            return Response(
-                {"status": "error", "message": f"Error updating file: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            serializer = JobFileSerializer(job_file)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Either a file or filename must be provided for PUT."}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, file_path=None):
-        """Delete a job file by its ID. (file_path param is actually the job_file.id)"""
+        """
+        Soft delete a job file by its ID. (file_path param is actually the job_file.id)
+        Marks the file status as 'deleted' and removes from disk.
+        Returns the serialized JobFile object.
+        """
+        job_file_id = file_path  # Parameter name from URL pattern
+
         try:
-            job_file = JobFile.objects.get(id=file_path)
-            full_path = os.path.join(
-                settings.DROPBOX_WORKFLOW_FOLDER, job_file.file_path
+            job_file = JobFile.objects.get(id=job_file_id)
+
+            full_disk_path = job_file._get_actual_file_disk_path  # Use model property
+
+            if full_disk_path and os.path.exists(full_disk_path):
+                try:
+                    os.remove(full_disk_path)
+                    logger.info("Deleted physical file from disk: %s", full_disk_path)
+                except OSError as e:
+                    logger.error(f"Error removing file from disk {full_disk_path}: {e}")
+                    # Decide if this error should halt the soft delete.
+                    # For now, we'll log and continue with soft delete.
+
+            job_file.status = "deleted"
+            job_file.save(update_fields=['status'])
+
+            logger.info(
+                "Soft-deleted JobFile record ID: %s (filename: %s, status set to 'deleted')",
+                job_file_id,
+                job_file.filename,
             )
 
-            if os.path.exists(full_path):
-                os.remove(full_path)
-                logger.info("Deleted file from disk: %s", full_path)
-
-            job_file.delete()
-            logger.info("Deleted JobFile record: %s", file_path)
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            serializer = JobFileSerializer(job_file)
+            return Response(serializer.data, status=status.HTTP_200_OK)  # Return object with 200 OK
 
         except JobFile.DoesNotExist:
-            logger.error("JobFile not found with id: %s", file_path)
+            logger.error("JobFile not found with id for deletion: %s", job_file_id)
             return Response(
                 {"status": "error", "message": "File not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
         except Exception as e:
-            logger.exception("Error deleting file %s", file_path)
+            logger.exception("Error during soft delete of file ID %s: %s", job_file_id, str(e))
             return Response(
-                {"status": "error", "message": str(e)},
+                {"status": "error", "message": f"An unexpected error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

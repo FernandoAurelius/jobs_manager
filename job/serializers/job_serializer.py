@@ -23,8 +23,8 @@ class JobSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source="client.name", read_only=True)
     job_status = serializers.CharField(source="status")
     job_files = JobFileSerializer(
-        source="files", many=False, required=False
-    )  # To prevent conflicts with PUTTING only one file
+        source="files", many=True, read_only=True, required=False
+    )
 
     class Meta:
         model = Job
@@ -34,7 +34,7 @@ class JobSerializer(serializers.ModelSerializer):
             "client_id",
             "client_name",
             "contact_person",
-            "contact_email",  # Added contact_email
+            "contact_email",
             "contact_phone",
             "job_number",
             "notes",
@@ -92,37 +92,39 @@ class JobSerializer(serializers.ModelSerializer):
         logger.debug(f"JobSerializer update called for instance {instance.id}")
         logger.debug(f"Validated data received: {validated_data}")
 
-        # Handle job files data first
-        files_data = validated_data.pop("files", None)
-        if files_data:
-            for file_data in files_data:
-                try:
-                    job_file = JobFile.objects.get(id=file_data["id"], job=instance)
-                    file_serializer = JobFileSerializer(
-                        instance=job_file,
-                        data=file_data,
-                        partial=True,
-                        context=self.context,
-                    )
-                    if file_serializer.is_valid():
-                        file_serializer.save()
-                    else:
-                        logger.error(
-                            f"JobFile validation failed: {file_serializer.errors}"
-                        )
-                        raise serializers.ValidationError(
-                            {"job_files": file_serializer.errors}
-                        )
-                except JobFile.DoesNotExist:
-                    logger.warning(
-                        (
-                            f"JobFile with id {file_data.get('id')} "
-                            f"not found for job {instance.id}"
-                        )
-                    )
-                except Exception as e:
-                    logger.error(f"Error updating JobFile: {str(e)}")
-                    raise serializers.ValidationError(f"Error updating file: {str(e)}")
+        # The 'files' field (source of 'job_files') is now read_only,
+        # so it won't be in validated_data.
+        # The following block for handling files_data can be removed or will simply not execute.
+        # files_data = validated_data.pop("files", None)
+        # if files_data:
+        #     for file_data in files_data:
+        #         try:
+        #             job_file = JobFile.objects.get(id=file_data["id"], job=instance)
+        #             file_serializer = JobFileSerializer(
+        #                 instance=job_file,
+        #                 data=file_data,
+        #                 partial=True,
+        #                 context=self.context,
+        #             )
+        #             if file_serializer.is_valid():
+        #                 file_serializer.save()
+        #             else:
+        #                 logger.error(
+        #                     f"JobFile validation failed: {file_serializer.errors}"
+        #                 )
+        #                 raise serializers.ValidationError(
+        #                     {"job_files": file_serializer.errors}
+        #                 )
+        #         except JobFile.DoesNotExist:
+        #             logger.warning(
+        #                 (
+        #                     f"JobFile with id {file_data.get('id')} "
+        #                     f"not found for job {instance.id}"
+        #                 )
+        #             )
+        #         except Exception as e:
+        #             logger.error(f"Error updating JobFile: {str(e)}")
+        #             raise serializers.ValidationError(f"Error updating file: {str(e)}")
 
         # Handle basic job fields next
         for attr, value in validated_data.items():
@@ -130,6 +132,7 @@ class JobSerializer(serializers.ModelSerializer):
                 "latest_estimate_pricing",
                 "latest_quote_pricing",
                 "latest_reality_pricing",
+                # "files", # 'files' (source of job_files) is not expected here anymore
             ]:
                 setattr(instance, attr, value)
 
