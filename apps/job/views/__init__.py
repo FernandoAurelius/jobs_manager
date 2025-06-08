@@ -8,6 +8,7 @@ from .archive_completed_jobs_view import (
 from .assign_job_view import AssignJobView
 from .job_file_upload import JobFileUploadView
 from .job_file_view import BinaryFileRenderer, JobFileView
+from .import_quote_view import ImportQuoteView
 from .workshop_view import WorkshopPDFView
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "BinaryFileRenderer",
     "JobFileView",
     "WorkshopPDFView",
+    "ImportQuoteView",
 ]

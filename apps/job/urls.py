@@ -19,6 +19,7 @@ from apps.job.views import (
     ArchiveCompleteJobsViews,
     AssignJobView,
     JobFileView,
+    import_quote_view,
 )
 
 app_name = "jobs"
@@ -70,6 +71,11 @@ urlpatterns = [
         "api/job/<uuid:job_id>/assignment",
         AssignJobView.as_view(),
         name="api_job_assigment",
+    ),
+    path(
+        "api/jobs/<uuid:job_id>/import-quote/",
+        import_quote_view.ImportQuoteView.as_view(),
+        name="import_quote",
     ),
     path(
         "api/job-event/<uuid:job_id>/add-event/",
