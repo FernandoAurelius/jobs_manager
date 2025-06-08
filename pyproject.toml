@@ -64,6 +64,7 @@ isort = "^5.13.2"
 vulture = "^2.12"
 deptry = "^0.20.0"
 pandas = "^2.2.3"
+openpyxl = "^3.1.2"
 django-debug-toolbar = "^4.4.6"
 pylint-django = "^2.6.1"
 
