@@ -102,6 +102,10 @@
         <div id="simpleQuoteTotalsTable" class="ag-theme-alpine prince-entry-table totals-table simple-pricing-table"></div>
 
         <div class="d-flex gap-2 mt-3">
+            <button type="button" id="importQuoteButton" class="btn btn-secondary">
+                <i class="bi bi-upload me-2"></i>Import Quote
+            </button>
+            <input type="file" id="importQuoteFileInput" accept=".xlsx,.xls" class="d-none">
             <button id="quoteJobButton" class="btn btn-primary" {% if quoted %} disabled {% endif %}>
                 <i class="bi bi-file-text me-2"></i>Quote Job
             </button>
@@ -306,4 +310,5 @@
 <script type="module" src="{% static 'js/time_conversion.js' %}"></script>
 <script type="module" src="{% static 'job/js/delete_job.js' %}"></script>
 <script type="module" src="{% static 'job/js/quill_init.js' %}"></script>
+<script type="module" src="{% static 'job/js/quote_import.js' %}"></script>
 {% endblock %}
